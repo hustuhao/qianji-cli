@@ -26,6 +26,11 @@ import (
 var tokenFile = filepath.Join(os.Getenv("HOME"), ".qianji_token.json")
 
 func main() {
+	// 初始化本地数据库
+	if err := qianji.InitDB(""); err != nil {
+		fatalf("初始化数据库失败: %v", err)
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		return
@@ -209,6 +214,9 @@ func cmdAdd(args []string) {
 		fatalf("记账失败: %v", err)
 	}
 
+	// 本地保存
+	qianji.SaveBills([]qianji.Bill{bill})
+
 	act := "支出"
 	if isIncome {
 		act = "收入"
@@ -282,14 +290,25 @@ func cmdList(args []string) {
 		}
 	}
 
-	fmt.Printf("正在拉取账单...\n")
-	bills, err := s.ListBills()
+	// 1. 从服务端拉取变更
+	serverBills, err := s.ListBills()
 	if err != nil {
-		fatalf("获取账单失败: %v", err)
+		fmt.Fprintf(os.Stderr, "同步账单: %v\n", err)
+	} else if len(serverBills) > 0 {
+		qianji.SaveBills(serverBills)
 	}
 
-	todayBills := qianji.BillsForDate(bills, targetDate)
-	if len(todayBills) == 0 {
+	// 2. 从本地 DB 查询
+	bills, err := qianji.QueryBillsByDate(targetDate)
+	if err != nil {
+		fatalf("查询账单失败: %v", err)
+	}
+
+	printBills(bills, targetDate)
+}
+
+func printBills(bills []qianji.Bill, targetDate time.Time) {
+	if len(bills) == 0 {
 		fmt.Printf("%s 没有账单记录\n", targetDate.Format("01月02日"))
 		return
 	}
@@ -298,7 +317,7 @@ func cmdList(args []string) {
 	fmt.Printf("\n%s:\n", targetDate.Format("2006-01-02  Monday"))
 	fmt.Println(strings.Repeat("-", 60))
 
-	for _, b := range todayBills {
+	for _, b := range bills {
 		tag := "支出"
 		if b.IsIncome() {
 			tag = "收入"
@@ -317,7 +336,7 @@ func cmdList(args []string) {
 	if incomeTotal > 0 {
 		fmt.Printf("  收入合计: ¥%.2f\n", incomeTotal)
 	}
-	fmt.Printf("  共 %d 笔\n", len(todayBills))
+	fmt.Printf("  共 %d 笔\n", len(bills))
 }
 
 // ---- logout ----
