@@ -7,12 +7,12 @@ import (
 	"os/exec"
 )
 
-// doPostCurl 通过 curl 发送 POST 请求
+// doPostCurl 通过 curl 发送 POST 请求（参数放 body）
 func (c *Client) doPostCurl(ctrl, act string, params url.Values, token string) ([]byte, error) {
 	return c.doRequest(ctrl, act, params, token, true)
 }
 
-// doGetCurl 通过 curl 发送 GET 请求
+// doGetCurl 通过 curl 发送 GET 请求（参数放 query string）
 func (c *Client) doGetCurl(ctrl, act string, params url.Values, token string) ([]byte, error) {
 	return c.doRequest(ctrl, act, params, token, false)
 }
@@ -22,13 +22,16 @@ func (c *Client) doRequest(ctrl, act string, params url.Values, token string, is
 
 	args := []string{"-s", "--connect-timeout", "10"}
 
-	// 参数放 URL query string（与 Volley 行为一致）
-	if len(params) > 0 {
-		u += "?" + params.Encode()
-	}
-
+	// POST: 参数放 body (-d)，GET: 参数放 query string
 	if isPost {
 		args = append(args, "-X", "POST")
+		if len(params) > 0 {
+			args = append(args, "-d", params.Encode())
+		}
+	} else {
+		if len(params) > 0 {
+			u += "?" + params.Encode()
+		}
 	}
 
 	args = append(args, u)
@@ -46,7 +49,6 @@ func (c *Client) doRequest(ctrl, act string, params url.Values, token string, is
 		"-H", "content-type: application/x-www-form-urlencoded",
 	)
 
-	// 关键：使用小写 header 名
 	args = append(args,
 		"-H", fmt.Sprintf("ctrl: %s", ctrl),
 		"-H", fmt.Sprintf("act: %s", act),

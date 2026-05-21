@@ -242,6 +242,7 @@ func cmdBooks([]string) {
 	if err != nil {
 		fatalf("获取账本失败: %v", err)
 	}
+	fmt.Printf("共 %d 个账本:\n", len(books))
 	for _, b := range books {
 		fmt.Printf("[%d] %s\n", b.ID, b.Name)
 	}

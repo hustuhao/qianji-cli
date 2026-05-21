@@ -68,15 +68,17 @@ func (s *Session) GetCategories() ([]Category, error) {
 	params := url.Values{}
 	params.Set("uid", s.UserID)
 
-	data, err := s.Client.doGet("category", "listv2", params, s.Token)
+	data, err := s.Client.doPost("category", "listv2", params, s.Token)
 	if err != nil {
 		return nil, err
 	}
 
 	var raw struct {
-		Ec   int        `json:"ec"`
-		Data []Category `json:"data"`
-		Em   string     `json:"em"`
+		Ec   int `json:"ec"`
+		Data struct {
+			List []Category `json:"list"`
+		} `json:"data"`
+		Em string `json:"em"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
@@ -84,7 +86,7 @@ func (s *Session) GetCategories() ([]Category, error) {
 	if raw.Ec != 200 {
 		return nil, fmt.Errorf("get categories failed (ec=%d): %s", raw.Ec, raw.Em)
 	}
-	return raw.Data, nil
+	return raw.Data.List, nil
 }
 
 // Category 分类模型。
@@ -104,15 +106,17 @@ func (s *Session) GetBooks() ([]Book, error) {
 	params := url.Values{}
 	params.Set("uid", s.UserID)
 
-	data, err := s.Client.doGet("book", "list", params, s.Token)
+	data, err := s.Client.doPost("book", "list", params, s.Token)
 	if err != nil {
 		return nil, err
 	}
 
 	var raw struct {
-		Ec   int    `json:"ec"`
-		Data []Book `json:"data"`
-		Em   string `json:"em"`
+		Ec   int `json:"ec"`
+		Data struct {
+			List []Book `json:"list"`
+		} `json:"data"`
+		Em string `json:"em"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
@@ -120,7 +124,7 @@ func (s *Session) GetBooks() ([]Book, error) {
 	if raw.Ec != 200 {
 		return nil, fmt.Errorf("get books failed (ec=%d): %s", raw.Ec, raw.Em)
 	}
-	return raw.Data, nil
+	return raw.Data.List, nil
 }
 
 // Book 账本模型。
@@ -135,15 +139,17 @@ func (s *Session) GetAssets() ([]AssetAccount, error) {
 	params := url.Values{}
 	params.Set("uid", s.UserID)
 
-	data, err := s.Client.doGet("asset", "list", params, s.Token)
+	data, err := s.Client.doPost("asset", "list", params, s.Token)
 	if err != nil {
 		return nil, err
 	}
 
 	var raw struct {
-		Ec   int            `json:"ec"`
-		Data []AssetAccount `json:"data"`
-		Em   string         `json:"em"`
+		Ec   int `json:"ec"`
+		Data struct {
+			List []AssetAccount `json:"list"`
+		} `json:"data"`
+		Em string `json:"em"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
@@ -151,7 +157,7 @@ func (s *Session) GetAssets() ([]AssetAccount, error) {
 	if raw.Ec != 200 {
 		return nil, fmt.Errorf("get assets failed (ec=%d): %s", raw.Ec, raw.Em)
 	}
-	return raw.Data, nil
+	return raw.Data.List, nil
 }
 
 // AssetAccount 资产账户模型。
