@@ -1,0 +1,28 @@
+# 反向分析文档（敏感信息）
+qianji_apk_analysis.md
+
+# 编译产物
+/qianji
+
+# 测试/抓包临时文件
+test/
+qianji_bypass.js
+qianji_capture.py
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
