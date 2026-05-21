@@ -46,6 +46,8 @@ func main() {
 		cmdAdd(args)
 	case "list", "ls":
 		cmdList(args)
+	case "sync":
+		cmdSync(args)
 	case "cats", "cat", "categories":
 		cmdCats(args)
 	case "books":

@@ -26,14 +26,15 @@ func InitDB(dbPath string) error {
 		dbPath = filepath.Join(home, ".qianji", "qianji.db")
 	}
 	os.MkdirAll(filepath.Dir(dbPath), 0700)
+	return initDBWithDSN(dbPath + "?_journal_mode=WAL")
+}
 
+func initDBWithDSN(dsn string) error {
 	var err error
-	db, err = sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	db, err = sql.Open("sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
-
-	// 从嵌入的 db.sql 执行建表
 	_, err = db.Exec(dbSQL)
 	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -78,27 +79,13 @@ func SaveBills(bills []Bill) error {
 	return tx.Commit()
 }
 
-// QueryBillsByDate 按日期查询本地账单（基于 TIME 字段）。
-func QueryBillsByDate(t time.Time) ([]Bill, error) {
-	if db == nil {
-		return nil, fmt.Errorf("db not initialized")
-	}
-	startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).Unix()
-	endOfDay := startOfDay + 86400
+// ---- 查询 ----
 
-	rows, err := db.Query(`
-		SELECT billid, USERID, TIME, TYPE, REMARK, MONEY, STATUS, CATEGORY_ID,
-		       IMAGES, updatetime, createtime, PLATFORM, ASSETID, FROMID, TARGETID,
-		       DESCINFO, bookid, USERNAME, BOOK_NAME
-		FROM user_bill
-		WHERE TIME >= ? AND TIME < ? AND STATUS != 0
-		ORDER BY TIME DESC
-	`, startOfDay, endOfDay)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+const billColumns = `billid, USERID, TIME, TYPE, REMARK, MONEY, STATUS, CATEGORY_ID,
+	IMAGES, updatetime, createtime, PLATFORM, ASSETID, FROMID, TARGETID,
+	DESCINFO, bookid, USERNAME, BOOK_NAME`
 
+func scanBills(rows *sql.Rows) ([]Bill, error) {
 	var bills []Bill
 	for rows.Next() {
 		var b Bill
@@ -129,13 +116,83 @@ func QueryBillsByDate(t time.Time) ([]Bill, error) {
 		if bookName.Valid {
 			b.BookName = bookName.String
 		}
-		b.CateName = fmt.Sprintf("#%d", b.CateID)
 		bills = append(bills, b)
 	}
-	return bills, nil
+	return bills, rows.Err()
 }
 
-// CountBills 返回本地账单总数（用于调试）。
+// QueryBillsByDate 按日期查询本地账单。
+func QueryBillsByDate(t time.Time) ([]Bill, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).Unix()
+	end := start + 86400
+
+	rows, err := db.Query(`
+		SELECT `+billColumns+`
+		FROM user_bill WHERE TIME >= ? AND TIME < ? AND STATUS != 0
+		ORDER BY TIME DESC
+	`, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanBills(rows)
+}
+
+// QueryAllBills 返回本地全部非删除账单。
+func QueryAllBills() ([]Bill, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	rows, err := db.Query(`
+		SELECT ` + billColumns + `
+		FROM user_bill WHERE STATUS != 0 ORDER BY TIME DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanBills(rows)
+}
+
+// QueryPendingBills 返回本地待同步账单（status=2）。
+func QueryPendingBills() ([]Bill, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	rows, err := db.Query(`
+		SELECT ` + billColumns + `
+		FROM user_bill WHERE STATUS = 2 ORDER BY TIME
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanBills(rows)
+}
+
+// MarkSynced 将指定账单 ID 标记为已同步（status=1）。
+func MarkSynced(billIDs []int64) error {
+	if db == nil || len(billIDs) == 0 {
+		return nil
+	}
+	q := "UPDATE user_bill SET STATUS=1 WHERE billid IN ("
+	args := make([]interface{}, len(billIDs))
+	for i, id := range billIDs {
+		if i > 0 {
+			q += ","
+		}
+		q += "?"
+		args[i] = id
+	}
+	q += ")"
+	_, err := db.Exec(q, args...)
+	return err
+}
+
+// CountBills 返回本地账单总数。
 func CountBills() int {
 	if db == nil {
 		return 0
@@ -143,4 +200,24 @@ func CountBills() int {
 	var c int
 	db.QueryRow("SELECT COUNT(*) FROM user_bill WHERE STATUS != 0").Scan(&c)
 	return c
+}
+
+// ---- 辅助：读取外部数据库 ----
+
+// OpenReadOnly 以只读模式打开一个外部 SQLite 文件。
+func OpenReadOnly(path string) (*sql.DB, error) {
+	return sql.Open("sqlite", "file:"+path+"?mode=ro")
+}
+
+// QueryAllFrom 从指定连接查询全部非删除账单。
+func QueryAllFrom(extDB *sql.DB) ([]Bill, error) {
+	rows, err := extDB.Query(`
+		SELECT ` + billColumns + `
+		FROM user_bill WHERE STATUS != 0 ORDER BY TIME DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanBills(rows)
 }

@@ -77,3 +77,8 @@ func (c *Client) doPost(ctrl, act string, params url.Values, token string) ([]by
 func (c *Client) doGet(ctrl, act string, params url.Values, token string) ([]byte, error) {
 	return c.doGetCurl(ctrl, act, params, token)
 }
+
+// DoPostRaw 暴露原始请求（调试用）。
+func (c *Client) DoPostRaw(ctrl, act string, params url.Values, token string) ([]byte, error) {
+	return c.doPostCurl(ctrl, act, params, token)
+}
