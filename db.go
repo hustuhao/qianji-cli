@@ -156,17 +156,32 @@ func QueryBillsByDate(t time.Time) ([]Bill, error) {
 	var bills []Bill
 	for rows.Next() {
 		var b Bill
-		var imagesJSON string
+		var imagesJSON, descInfo, bookName, username, userID, remark sql.NullString
 		err := rows.Scan(
-			&b.ID, &b.UserID, &b.TimeInSec, &b.Type, &b.Remark, &b.Money, &b.Status, &b.CateID,
+			&b.ID, &userID, &b.TimeInSec, &b.Type, &remark, &b.Money, &b.Status, &b.CateID,
 			&imagesJSON, &b.UpdateTime, &b.CreateTime, &b.Platform, &b.AssetID, &b.FromID, &b.TargetID,
-			&b.DescInfo, &b.BookID, &b.Username, &b.BookName,
+			&descInfo, &b.BookID, &username, &bookName,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
-		if imagesJSON != "" && imagesJSON != "null" {
-			json.Unmarshal([]byte(imagesJSON), &b.Images)
+		if userID.Valid {
+			b.UserID = userID.String
+		}
+		if remark.Valid {
+			b.Remark = remark.String
+		}
+		if imagesJSON.Valid && imagesJSON.String != "" && imagesJSON.String != "null" {
+			json.Unmarshal([]byte(imagesJSON.String), &b.Images)
+		}
+		if descInfo.Valid {
+			b.DescInfo = descInfo.String
+		}
+		if username.Valid {
+			b.Username = username.String
+		}
+		if bookName.Valid {
+			b.BookName = bookName.String
 		}
 		b.CateName = fmt.Sprintf("#%d", b.CateID)
 		bills = append(bills, b)
