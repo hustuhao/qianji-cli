@@ -154,6 +154,7 @@ func cmdAdd(args []string) {
 
 	var isIncome bool
 	var cateID, bookID, assetID int64
+	var customTime time.Time
 
 	// 解析简单 flags
 	var positional []string
@@ -175,6 +176,11 @@ func cmdAdd(args []string) {
 			i++
 			if i < len(args) {
 				assetID, _ = strconv.ParseInt(args[i], 10, 64)
+			}
+		case "-t":
+			i++
+			if i < len(args) {
+				customTime, _ = parseTime(args[i])
 			}
 		default:
 			positional = append(positional, args[i])
@@ -209,6 +215,9 @@ func cmdAdd(args []string) {
 	}
 	if assetID > 0 {
 		bill = bill.WithAsset(assetID)
+	}
+	if !customTime.IsZero() {
+		bill = bill.WithTime(customTime)
 	}
 
 	_, err = s.AddBill(bill)
@@ -279,14 +288,14 @@ func cmdAssets([]string) {
 func cmdList(args []string) {
 	s := mustSession()
 
-	// 解析日期参数 -d MM.DD
+	// 解析日期参数 -d MM.DD / YYYY-MM-DD
 	targetDate := time.Now()
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-d" && i+1 < len(args) {
-			d, err := time.Parse("1.2", args[i+1])
-			if err == nil {
-				now := time.Now()
-				targetDate = time.Date(now.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.Local)
+			if t, err := time.ParseInLocation("2006-1-2", args[i+1], time.Local); err == nil {
+				targetDate = t
+			} else if t, err := time.ParseInLocation("1.2", args[i+1], time.Local); err == nil {
+				targetDate = time.Date(time.Now().Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
 			}
 			break
 		}
@@ -353,4 +362,31 @@ func cmdLogout() {
 func fatalf(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
+}
+
+// parseTime 解析时间字符串，支持多种格式:
+//
+//	"1.2 15:04"     → 今年 1月2日 15:04
+//	"2006-1-2 15:04" → 完整日期时间
+//	单纯数字          → 视为 "M.D"
+func parseTime(s string) (time.Time, error) {
+	now := time.Now()
+	formats := []string{
+		"2006-1-2 15:04",
+		"2006-1-2 15:04:05",
+		"2006-01-02 15:04",
+		"1.2 15:04",
+		"1.2 15:04:05",
+	}
+	for _, f := range formats {
+		t, err := time.ParseInLocation(f, s, time.Local)
+		if err == nil {
+			if t.Year() == 0 {
+				t = time.Date(now.Year(), t.Month(), t.Day(),
+					t.Hour(), t.Minute(), t.Second(), 0, time.Local)
+			}
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("无法解析时间: %s (支持: 5.21 22:30 或 2025-5-21 22:30)", s)
 }

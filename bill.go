@@ -106,6 +106,14 @@ func (b Bill) WithAsset(assetID int64) Bill {
 	return b
 }
 
+// WithTime 设置账单时间。
+func (b Bill) WithTime(t time.Time) Bill {
+	b.TimeInSec = t.Unix()
+	b.CreateTime = t.Unix()
+	b.UpdateTime = t.Unix()
+	return b
+}
+
 // SyncBills 同步账单到服务端，同时拉回服务端数据。
 func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]Bill, error) {
 	payload := SyncPayload{
