@@ -1,39 +1,10 @@
 // 本地 SQLite 存储 — 完全模仿钱迹 Android 客户端 user_bill 表结构
-// 使用 modernc.org/sqlite (纯 Go，无 CGO 依赖)
-//
-// 表结构来自 BillDao.createTable() 逆向:
-//
-//	CREATE TABLE "user_bill" (
-//	  "_id"             INTEGER PRIMARY KEY AUTOINCREMENT,
-//	  "billid"          INTEGER NOT NULL,        -- 服务端唯一 ID
-//	  "USERID"          TEXT,
-//	  "TIME"            INTEGER NOT NULL,        -- 账单时间 (Unix 秒)
-//	  "TYPE"            INTEGER NOT NULL,        -- 0=支出 1=收入 2=转账...
-//	  "REMARK"          TEXT,
-//	  "MONEY"           REAL NOT NULL,
-//	  "STATUS"          INTEGER NOT NULL,        -- 0=deleted 1=synced 2=pending
-//	  "CATEGORY_ID"     INTEGER NOT NULL,
-//	  "IMAGES"          TEXT,                    -- JSON 数组
-//	  "PAYTYPE"         INTEGER NOT NULL,
-//	  "updatetime"      INTEGER NOT NULL,
-//	  "createtime"      INTEGER NOT NULL,
-//	  "PLATFORM"        INTEGER NOT NULL,
-//	  "ASSETID"         INTEGER NOT NULL,
-//	  "FROMID"          INTEGER NOT NULL,
-//	  "TARGETID"        INTEGER NOT NULL,
-//	  "EXTRA"           TEXT,                    -- JSON
-//	  "DESCINFO"        TEXT,
-//	  "bookid"          INTEGER NOT NULL,
-//	  "USERNAME"        TEXT,
-//	  "FROMACT"         TEXT,
-//	  "TARGETACT"       TEXT,
-//	  "IMPORT_PACK_ID"  INTEGER NOT NULL,
-//	  "BOOK_NAME"       TEXT
-//	)
+// schema 由 db.sql 维护，编译时通过 embed 嵌入二进制。
 package qianji
 
 import (
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -42,6 +13,9 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+//go:embed db.sql
+var dbSQL string
 
 var db *sql.DB
 
@@ -58,41 +32,13 @@ func InitDB(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
-	return migrate()
-}
 
-func migrate() error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS user_bill (
-			_id             INTEGER PRIMARY KEY AUTOINCREMENT,
-			billid          INTEGER NOT NULL,
-			USERID          TEXT,
-			TIME            INTEGER NOT NULL,
-			TYPE            INTEGER NOT NULL,
-			REMARK          TEXT,
-			MONEY           REAL NOT NULL,
-			STATUS          INTEGER NOT NULL,
-			CATEGORY_ID     INTEGER NOT NULL,
-			IMAGES          TEXT,
-			PAYTYPE         INTEGER NOT NULL,
-			updatetime      INTEGER NOT NULL,
-			createtime      INTEGER NOT NULL,
-			PLATFORM        INTEGER NOT NULL,
-			ASSETID         INTEGER NOT NULL,
-			FROMID          INTEGER NOT NULL,
-			TARGETID        INTEGER NOT NULL,
-			EXTRA           TEXT,
-			DESCINFO        TEXT,
-			bookid          INTEGER NOT NULL,
-			USERNAME        TEXT,
-			FROMACT         TEXT,
-			TARGETACT       TEXT,
-			IMPORT_PACK_ID  INTEGER NOT NULL,
-			BOOK_NAME       TEXT
-		);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_user_bill_billid ON user_bill (billid);
-	`)
-	return err
+	// 从嵌入的 db.sql 执行建表
+	_, err = db.Exec(dbSQL)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	return nil
 }
 
 // SaveBills 批量存入本地 DB（upsert by billid）。
