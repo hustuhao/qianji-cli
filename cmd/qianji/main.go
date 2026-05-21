@@ -17,6 +17,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/wepie/qianji"
 )
@@ -37,6 +39,8 @@ func main() {
 		cmdLogin(args)
 	case "add":
 		cmdAdd(args)
+	case "list", "ls":
+		cmdList(args)
 	case "cats", "cat", "categories":
 		cmdCats(args)
 	case "books":
@@ -60,6 +64,7 @@ func printUsage() {
 命令:
   login          登录到钱迹账号
   add <金额> <备注>  快速添加一笔支出
+  list            列出今日账单
   cats           列出所有分类
   books          列出所有账本
   assets         列出资产账户
@@ -69,7 +74,9 @@ func printUsage() {
   qianji login                 交互式登录
   qianji add 26.5 咖啡         支出一笔 26.5 元"咖啡"
   qianji add -i 1000 工资      收入一笔 1000 元"工资"
-  qianji add -c 5 35 午餐      指定分类 ID 为 5`)
+  qianji add -c 5 35 午餐      指定分类 ID 为 5
+  qianji list                  列出今天的账单
+  qianji list -d 5.20          列出 5 月 20 日的账单`)
 }
 
 // ---- login ----
@@ -197,20 +204,16 @@ func cmdAdd(args []string) {
 		bill = bill.WithAsset(assetID)
 	}
 
-	result, err := s.AddBill(bill)
+	_, err = s.AddBill(bill)
 	if err != nil {
 		fatalf("记账失败: %v", err)
 	}
 
-	if result.Code == 0 {
-		act := "支出"
-		if isIncome {
-			act = "收入"
-		}
-		fmt.Printf("OK %s %.2f %s\n", act, moneyVal, remark)
-	} else {
-		fatalf("记账失败 (code=%d): %s", result.Code, result.Msg)
+	act := "支出"
+	if isIncome {
+		act = "收入"
 	}
+	fmt.Printf("OK %s %.2f %s\n", act, moneyVal, remark)
 }
 
 // ---- cats ----
@@ -259,6 +262,62 @@ func cmdAssets([]string) {
 	for _, a := range assets {
 		fmt.Printf("[%d] %-15s  %.2f\n", a.ID, a.Name, a.Amount)
 	}
+}
+
+// ---- list ----
+
+func cmdList(args []string) {
+	s := mustSession()
+
+	// 解析日期参数 -d MM.DD
+	targetDate := time.Now()
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-d" && i+1 < len(args) {
+			d, err := time.Parse("1.2", args[i+1])
+			if err == nil {
+				now := time.Now()
+				targetDate = time.Date(now.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.Local)
+			}
+			break
+		}
+	}
+
+	fmt.Printf("正在拉取账单...\n")
+	bills, err := s.ListBills()
+	if err != nil {
+		fatalf("获取账单失败: %v", err)
+	}
+
+	todayBills := qianji.BillsForDate(bills, targetDate)
+	if len(todayBills) == 0 {
+		fmt.Printf("%s 没有账单记录\n", targetDate.Format("01月02日"))
+		return
+	}
+
+	var expenseTotal, incomeTotal float64
+	fmt.Printf("\n%s:\n", targetDate.Format("2006-01-02  Monday"))
+	fmt.Println(strings.Repeat("-", 60))
+
+	for _, b := range todayBills {
+		tag := "支出"
+		if b.IsIncome() {
+			tag = "收入"
+			incomeTotal += b.Money
+		} else {
+			expenseTotal += b.Money
+		}
+		t := time.Unix(b.TimeInSec, 0).Format("15:04")
+		fmt.Printf("  %s  %-6s  ¥%-8.2f  %s\n", t, tag, b.Money, b.Remark)
+	}
+
+	fmt.Println(strings.Repeat("-", 60))
+	if expenseTotal > 0 {
+		fmt.Printf("  支出合计: ¥%.2f\n", expenseTotal)
+	}
+	if incomeTotal > 0 {
+		fmt.Printf("  收入合计: ¥%.2f\n", incomeTotal)
+	}
+	fmt.Printf("  共 %d 笔\n", len(todayBills))
 }
 
 // ---- logout ----
