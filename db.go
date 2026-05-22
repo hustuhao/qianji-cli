@@ -209,6 +209,11 @@ func OpenReadOnly(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", "file:"+path+"?mode=ro")
 }
 
+// OpenForWrite 以读写模式打开一个外部 SQLite 文件。
+func OpenForWrite(path string) (*sql.DB, error) {
+	return sql.Open("sqlite", "file:"+path)
+}
+
 // QueryAllFrom 从指定连接查询全部非删除账单。
 func QueryAllFrom(extDB *sql.DB) ([]Bill, error) {
 	rows, err := extDB.Query(`
@@ -220,4 +225,38 @@ func QueryAllFrom(extDB *sql.DB) ([]Bill, error) {
 	}
 	defer rows.Close()
 	return scanBills(rows)
+}
+
+// SaveTo 将账单写入指定的数据库连接。
+func SaveTo(extDB *sql.DB, bills []Bill) error {
+	tx, err := extDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO user_bill
+		(billid, USERID, TIME, TYPE, REMARK, MONEY, STATUS, CATEGORY_ID,
+		 IMAGES, PAYTYPE, updatetime, createtime, PLATFORM, ASSETID, FROMID, TARGETID,
+		 EXTRA, DESCINFO, bookid, USERNAME, FROMACT, TARGETACT, IMPORT_PACK_ID, BOOK_NAME)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, b := range bills {
+		imagesJSON, _ := json.Marshal(b.Images)
+		_, err = stmt.Exec(
+			b.ID, b.UserID, b.TimeInSec, b.Type, b.Remark, b.Money, b.Status, b.CateID,
+			string(imagesJSON), 0, b.UpdateTime, b.CreateTime, b.Platform, b.AssetID, b.FromID, b.TargetID,
+			"", b.DescInfo, b.BookID, b.Username, "", "", 0, b.BookName,
+		)
+		if err != nil {
+			return fmt.Errorf("insert bill %d: %w", b.ID, err)
+		}
+	}
+	return tx.Commit()
 }
