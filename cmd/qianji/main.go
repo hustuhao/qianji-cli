@@ -46,6 +46,8 @@ func main() {
 		cmdAdd(args)
 	case "list", "ls":
 		cmdList(args)
+	case "delete", "rm", "del":
+		cmdDelete(args)
 	case "sync":
 		cmdSync(args)
 	case "cats", "cat", "categories":
@@ -349,6 +351,29 @@ func printBills(bills []qianji.Bill, targetDate time.Time) {
 		fmt.Printf("  收入合计: ¥%.2f\n", incomeTotal)
 	}
 	fmt.Printf("  共 %d 笔\n", len(bills))
+}
+
+// ---- delete ----
+
+func cmdDelete(args []string) {
+	if len(args) < 1 {
+		fatalf("用法: qianji delete <billid>\n先用 qianji list 查看 billid")
+	}
+	billID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		fatalf("billid 格式错误: %s", args[0])
+	}
+
+	s := mustSession()
+
+	// 推送删除到服务端
+	if err := s.DeleteBill(billID); err != nil {
+		fatalf("删除失败: %v", err)
+	}
+
+	// 本地标记删除
+	qianji.SaveBills([]qianji.Bill{{ID: billID, Status: 0}})
+	fmt.Printf("已删除 billid=%d\n", billID)
 }
 
 // ---- logout ----
