@@ -207,7 +207,117 @@ func (s *Session) AddBill(bill Bill) (*AddBillResult, error) {
 	return &AddBillResult{Bills: bills}, nil
 }
 
-// AddBillResult add 命令的返回。
+// PullResult 是 syncv2/pull 响应。
+type PullResult struct {
+	Changes  []Bill   `json:"changes"`
+	Deletes  []int64  `json:"deletes"`
+	PageInfo PullPage `json:"-"`
+}
+
+// PullPage 分页信息。
+type PullPage struct {
+	BookID    int64  `json:"bookid"`
+	PageOff   int64  `json:"pageoffset"`
+	HasMore   bool   `json:"hasmore"`
+	Count     int    `json:"count"`
+	PageSign  string `json:"pagesign"`
+}
+
+// PullBills 从服务端拉取其他设备的账单（syncv2/pull）。
+// bookID=-1 表示拉全部账本。lastTimes 可追溯上次同步时间实现增量拉取。
+func (s *Session) PullBills(bookID int64, lastTimes string, pageOff int64, pageSign string) (*PullResult, error) {
+	params := url.Values{}
+	params.Set("uid", s.UserID)
+	params.Set("bookid", fmt.Sprintf("%d", bookID))
+	if lastTimes != "" {
+		params.Set("lasttimes", lastTimes)
+	}
+	params.Set("pageoffset", fmt.Sprintf("%d", pageOff))
+	params.Set("pagesign", pageSign)
+
+	data, err := s.Client.doPost("syncv2", "pull", params, s.Token)
+	if err != nil {
+		return nil, fmt.Errorf("pull: %w", err)
+	}
+
+	var raw struct {
+		Ec   int      `json:"ec"`
+		Em   string   `json:"em"`
+		Data PullResult `json:"data"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse pull: %w", err)
+	}
+	if raw.Ec != 200 {
+		return nil, fmt.Errorf("pull failed (ec=%d): %s", raw.Ec, raw.Em)
+	}
+
+	result := &raw.Data
+
+	// 解析内嵌的 pageParams
+	var page struct {
+		BookID   int64  `json:"bookid"`
+		PageOff  int64  `json:"pageoffset"`
+		HasMore  int    `json:"hasmore"`
+		Count    int    `json:"count"`
+		PageSign string `json:"pagesign"`
+	}
+	var rawWrapper struct {
+		Data struct {
+			BookID   int64  `json:"bookid"`
+			PageOff  int64  `json:"pageoffset"`
+			HasMore  int    `json:"hasmore"`
+			Count    int    `json:"count"`
+			PageSign string `json:"pagesign"`
+		} `json:"data"`
+	}
+	// pageParams 在响应的 data 级别（与 changes/deletes 平级）
+	if err := json.Unmarshal(data, &rawWrapper); err == nil {
+		page.BookID = rawWrapper.Data.BookID
+		page.PageOff = rawWrapper.Data.PageOff
+		page.HasMore = rawWrapper.Data.HasMore
+		page.Count = rawWrapper.Data.Count
+		page.PageSign = rawWrapper.Data.PageSign
+	}
+	result.PageInfo = PullPage{
+		BookID:   page.BookID,
+		PageOff:  page.PageOff,
+		HasMore:  page.HasMore == 1,
+		Count:    page.Count,
+		PageSign: page.PageSign,
+	}
+	return result, nil
+}
+
+// FullSync 完整同步：先拉取其他设备账单，再推送本地待同步。
+func (s *Session) FullSync(pending []Bill) (pulledBills []Bill, err error) {
+	// 1. PULL: 循环拉直到 hasMore=false
+	pageOff := int64(0)
+	pageSign := ""
+	for {
+		pr, err := s.PullBills(-1, "", pageOff, pageSign)
+		if err != nil {
+			return pulledBills, fmt.Errorf("pull page: %w", err)
+		}
+		pulledBills = append(pulledBills, pr.Changes...)
+		// 处理删除
+		for _, delID := range pr.Deletes {
+			// 本地标记为已删除
+			SaveBills([]Bill{{ID: delID, Status: 0}})
+		}
+		if !pr.PageInfo.HasMore {
+			break
+		}
+		pageOff = pr.PageInfo.PageOff
+		pageSign = pr.PageInfo.PageSign
+	}
+
+	// 2. PUSH: 推送本地待同步
+	if len(pending) > 0 {
+		s.SyncBills(pending, nil)
+	}
+	return pulledBills, nil
+}
 type AddBillResult struct {
 	Bills []Bill
 }

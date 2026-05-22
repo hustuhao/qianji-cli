@@ -9,20 +9,23 @@ import (
 
 // doPostCurl 通过 curl 发送 POST 请求（参数放 body）
 func (c *Client) doPostCurl(ctrl, act string, params url.Values, token string) ([]byte, error) {
-	return c.doRequest(ctrl, act, params, token, true)
+	return c.doRequestWith(ctrl, act, params, token, true, "")
+}
+
+func (c *Client) doPostCurlWithDevID(ctrl, act string, params url.Values, token, devid string) ([]byte, error) {
+	return c.doRequestWith(ctrl, act, params, token, true, devid)
 }
 
 // doGetCurl 通过 curl 发送 GET 请求（参数放 query string）
 func (c *Client) doGetCurl(ctrl, act string, params url.Values, token string) ([]byte, error) {
-	return c.doRequest(ctrl, act, params, token, false)
+	return c.doRequestWith(ctrl, act, params, token, false, "")
 }
 
-func (c *Client) doRequest(ctrl, act string, params url.Values, token string, isPost bool) ([]byte, error) {
+func (c *Client) doRequestWith(ctrl, act string, params url.Values, token string, isPost bool, devid string) ([]byte, error) {
 	u := c.Host + "/" + ctrl + "/" + act
 
 	args := []string{"-s", "--connect-timeout", "10"}
 
-	// POST: 参数放 body (-d)，GET: 参数放 query string
 	if isPost {
 		args = append(args, "-X", "POST")
 		if len(params) > 0 {
@@ -36,8 +39,12 @@ func (c *Client) doRequest(ctrl, act string, params url.Values, token string, is
 
 	args = append(args, u)
 
-	// 设备头
-	for k, v := range signHeaders() {
+	// 设备头（可选覆盖 devid）
+	h := signHeaders()
+	if devid != "" {
+		h["devid"] = devid
+	}
+	for k, v := range h {
 		args = append(args, "-H", fmt.Sprintf("%s: %s", k, v))
 	}
 
@@ -82,3 +89,11 @@ func (c *Client) doGet(ctrl, act string, params url.Values, token string) ([]byt
 func (c *Client) DoPostRaw(ctrl, act string, params url.Values, token string) ([]byte, error) {
 	return c.doPostCurl(ctrl, act, params, token)
 }
+
+// DoPostCustom 使用指定的 devid 发请求（模拟其他设备）。
+func (c *Client) DoPostCustom(ctrl, act string, params url.Values, token, devid string) ([]byte, error) {
+	return c.doPostCurlWithDevID(ctrl, act, params, token, devid)
+}
+
+// DeviceID 返回当前设备 ID。
+func DeviceID() string { return deviceID }
