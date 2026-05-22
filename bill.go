@@ -3,6 +3,7 @@ package qianji
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"strings"
 	"time"
@@ -74,6 +75,7 @@ type SyncBody struct {
 func NewBill(bookID int64, money float64, remark string) Bill {
 	now := time.Now().Unix()
 	return Bill{
+		ID:         newBillID(),
 		BookID:     bookID,
 		Money:      money,
 		Remark:     remark,
@@ -117,11 +119,53 @@ func (b Bill) WithTime(t time.Time) Bill {
 // SyncBills 推送本地变更到服务端（bill/syncall）。
 // SyncBills 推送本地变更到服务端（bill/syncall）。
 func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
-	payload := SyncPayload{
-		Bills: SyncBody{
-			ChangeList: changes,
-			DelList:    deletes,
-		},
+	// 构建 syncall payload，将 "id" 替换为 "billid"
+	type syncBill struct {
+		BillID     int64    `json:"billid"`
+		UserID     string   `json:"userid"`
+		TimeInSec  int64    `json:"time"`
+		Type       int      `json:"type"`
+		Remark     string   `json:"remark,omitempty"`
+		Money      float64  `json:"money"`
+		Status     int      `json:"status"`
+		CateID     int64    `json:"cateid"`
+		Images     []string `json:"images,omitempty"`
+		PayType    int      `json:"paytype"`
+		UpdateTime int64    `json:"updatetime"`
+		CreateTime int64    `json:"createtime"`
+		Platform   int      `json:"platform"`
+		AssetID    int64    `json:"assetid"`
+		FromID     int64    `json:"fromid"`
+		TargetID   int64    `json:"targetid"`
+		Extra      string   `json:"extra,omitempty"`
+		DescInfo   string   `json:"descinfo,omitempty"`
+		BookID     int64    `json:"bookid"`
+		Username   string   `json:"username,omitempty"`
+	}
+
+	syncChanges := make([]syncBill, len(changes))
+	for i, b := range changes {
+		syncChanges[i] = syncBill{
+			BillID: b.ID, UserID: b.UserID, TimeInSec: b.TimeInSec,
+			Type: b.Type, Remark: b.Remark, Money: b.Money,
+			Status: b.Status, CateID: b.CateID, Images: b.Images,
+			UpdateTime: b.UpdateTime, CreateTime: b.CreateTime,
+			Platform: b.Platform, AssetID: b.AssetID,
+			FromID: b.FromID, TargetID: b.TargetID,
+			DescInfo: b.DescInfo, BookID: b.BookID, Username: b.Username,
+		}
+	}
+
+	payload := struct {
+		Bills struct {
+			ChangeList []syncBill `json:"changelist,omitempty"`
+			DelList    []int64    `json:"dellist,omitempty"`
+		} `json:"bills"`
+	}{
+		Bills: struct {
+			ChangeList []syncBill `json:"changelist,omitempty"`
+			DelList    []int64    `json:"dellist,omitempty"`
+		}{ChangeList: syncChanges, DelList: deletes},
 	}
 
 	vJSON, err := json.Marshal(payload)
@@ -334,4 +378,9 @@ type AddBillResult struct {
 func (s *Session) DeleteBill(billID int64) error {
 	_, err := s.SyncBills(nil, []int64{billID})
 	return err
+}
+
+// newBillID 生成 17-18 位 billid（模仿 n8.j.f()）。
+func newBillID() int64 {
+	return time.Now().UnixMilli()*1000 + rand.Int63n(1000)
 }

@@ -53,7 +53,7 @@ func (c *Client) doRequestWith(ctrl, act string, params url.Values, token string
 	args = append(args,
 		"-H", fmt.Sprintf("reqidv2: %s", reqID),
 		"-H", fmt.Sprintf("tok: %s", tok),
-		"-H", "content-type: application/x-www-form-urlencoded",
+		"-H", "content-type: application/x-www-form-urlencoded; charset=UTF-8",
 	)
 
 	args = append(args,
