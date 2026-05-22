@@ -332,6 +332,8 @@ CLI 推送账单时遇到 `has_failed: true`，服务端拒绝存储。
 | 6 | 缺少 `fr` 参数 | 添加 (标识请求来源设备) |
 | 7 | 缺少 `packid` 字段 | 添加 |
 | 8 | 缺少 `cateid` 默认值 | 默认分类 "其它"=89693200 |
+| 9 | `BillID` 硬编码为 0 | 使用 `newBillID()` 生成 ID（服务端不会自动分配） |
+| 10 | `userid` 字段为空 | SyncBills 回退使用 `s.UserID`（空 userid 导致分类重置） |
 
 ---
 
@@ -357,3 +359,35 @@ CLI: qianji delete <billid>
 | syncv2/pull | `deletes` 数组包含被删 billid |
 | 本地删除 | STATUS=0, 列表不再显示 |
 | 其他设备 | 模拟器下拉刷新后账单消失 |
+| `BillID=0` | 服务端忽略账单推送 (ec=200 但不存储) | syncall JSON `"id"` 使用 `newBillID()` 的值 |
+| `userid=""` | 服务端分类重置为默认值 (89693200 其他) | SyncBills 回退使用 `s.UserID` |
+
+### 10.3 根因分析：BillID 和 userid
+
+**问题 1: BillID 硬编码为 0**
+
+`SyncBills` 中将 `syncBill.BillID` 硬编码为 `0`（注释说"让服务端分配新 billid"），但服务端不会自动分配 billid — 它期望客户端生成。`billid=0` 的账单会被服务端静默丢弃（syncall 返回 `ec=200` 并在 `new_ids` 中确认，但 pull 不会返回该账单）。
+
+修复：使用 Bill 的 `ID` 字段（由 `newBillID()` 生成）。
+
+**问题 2: userid 为空**
+
+`NewBill()` 未设置 `UserID` 字段（默认为空字符串 `""`）。`SyncBills` 直接使用 `b.UserID` 构造 syncall payload，导致 `"userid":""`。服务端将空 userid 的账单视为未初始化，将 `cateid` 重置为默认值 `89693200`（其他），同时 `catename` 为空。
+
+修复：`SyncBills` 中增加回退逻辑 — 当 `b.UserID == ""` 时使用 `s.UserID`（Session 保存的登录用户 ID）。
+
+**问题 3: Pull 不返回自推账单（时间窗口假象）**
+
+现象：CLI 推送后立即 pull 找不到自己的账单。根因并非 devid 隔离（pull 确实跨 devid 共享），而是 `BillID=0` 导致账单从未被存储。修复 BillID 后该问题自动消失。
+
+验证：修复后分别用 CLI devid 和模拟器 devid pull，均能返回 CLI 推送的账单（含正确 cateid）。
+
+### 10.4 分类修复验证矩阵
+
+| 推送来源 | 修复前 | 修复后 |
+|---------|--------|--------|
+| CLI (`./qianji add -c 89693183`) | cateid=89693200 ✗ | cateid=89693183 ✓ |
+| 模拟器 devid (手动 push) | cateid=89693183 ✓ | cateid=89693183 ✓ |
+| 原始 curl (带 userid) | cateid=89693183 ✓ | cateid=89693183 ✓ |
+
+结论：服务端按 devid 建立分类信任，但空 userid 会绕过信任导致重置。

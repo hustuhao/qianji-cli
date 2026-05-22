@@ -75,7 +75,7 @@ type SyncBody struct {
 func NewBill(bookID int64, money float64, remark string) Bill {
 	now := time.Now().Unix()
 	if bookID <= 0 {
-		bookID = 0
+		bookID = -1
 	}
 	return Bill{
 		ID:         newBillID(),
@@ -147,15 +147,21 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 	}
 
 	syncChanges := make([]syncBill, len(changes))
+	userID := s.UserID
 	for i, b := range changes {
+		billUserID := b.UserID
+		if billUserID == "" {
+			billUserID = userID
+		}
 		sb := syncBill{
-			BillID: b.ID, UserID: b.UserID, TimeInSec: b.TimeInSec,
+			BillID: b.ID, // 使用本地生成的 billid
+			UserID: billUserID, TimeInSec: b.TimeInSec,
 			Type: b.Type, Remark: b.Remark, Money: b.Money,
 			Status: b.Status, CateID: b.CateID,
 			UpdateTime: b.UpdateTime, CreateTime: b.CreateTime,
 			Platform: b.Platform, DescInfo: b.DescInfo,
 			BookID: b.BookID, Username: b.Username,
-			AssetID: 0, FromID: 0, TargetID: 0, PackID: 0,
+			AssetID: -1, FromID: -1, TargetID: -1, PackID: -1,
 			Images: []string{}, Extra: "",
 		}
 		if b.AssetID > 0 {
@@ -168,7 +174,7 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 			sb.TargetID = b.TargetID
 		}
 		if b.BookID <= 0 {
-			sb.BookID = 0
+			sb.BookID = -1
 		}
 		if b.CateID <= 0 {
 			sb.CateID = 89693200 // 默认分类：其它
@@ -198,7 +204,6 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 
 	params := url.Values{}
 	params.Set("uid", s.UserID)
-	params.Set("fr", s.UserID) // 必须：标识请求来源设备
 	params.Set("v", string(vJSON))
 
 	data, err := s.Client.doPost("bill", "syncall", params, s.Token)

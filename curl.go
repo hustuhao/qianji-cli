@@ -63,7 +63,10 @@ func (c *Client) doRequestWith(ctrl, act string, params url.Values, token string
 
 	if token != "" {
 		args = append(args, "-H", fmt.Sprintf("utoken: %s", token))
-		args = append(args, "-H", "htoken: 1")
+		// syncall 和 pull 才需要 htoken
+		if ctrl == "bill" && act == "syncall" || ctrl == "syncv2" && act == "pull" {
+			args = append(args, "-H", "htoken: 1")
+		}
 	}
 
 	cmd := exec.Command("curl", args...)
