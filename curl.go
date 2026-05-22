@@ -63,6 +63,7 @@ func (c *Client) doRequestWith(ctrl, act string, params url.Values, token string
 
 	if token != "" {
 		args = append(args, "-H", fmt.Sprintf("utoken: %s", token))
+		args = append(args, "-H", "htoken: 1")
 	}
 
 	cmd := exec.Command("curl", args...)

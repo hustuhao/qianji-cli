@@ -115,7 +115,7 @@ func (b Bill) WithTime(t time.Time) Bill {
 }
 
 // SyncBills 推送本地变更到服务端（bill/syncall）。
-// 返回服务端分配的新 ID 列表（new_ids）。
+// SyncBills 推送本地变更到服务端（bill/syncall）。
 func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 	payload := SyncPayload{
 		Bills: SyncBody{
@@ -131,6 +131,7 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 
 	params := url.Values{}
 	params.Set("uid", s.UserID)
+	params.Set("fr", s.UserID) // 必须：标识请求来源设备
 	params.Set("v", string(vJSON))
 
 	data, err := s.Client.doPost("bill", "syncall", params, s.Token)
@@ -231,6 +232,7 @@ type PullPage struct {
 func (s *Session) PullBills(bookID int64, lastTimes string, pageOff int64, pageSign string) (*PullResult, error) {
 	params := url.Values{}
 	params.Set("uid", s.UserID)
+	params.Set("fr", s.UserID)
 	params.Set("bookid", fmt.Sprintf("%d", bookID))
 	if lastTimes != "" {
 		params.Set("lasttimes", lastTimes)
