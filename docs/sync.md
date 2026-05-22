@@ -312,10 +312,48 @@ CLI 推送账单时遇到 `has_failed: true`，服务端拒绝存储。
 | `packid` | `-1` |
 | `cateid` | `89693200` (默认分类"其它") |
 
-### 9.4 必要参数
+### 9.5 其他必要参数
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
 | `fr` | `<user_id>` | 请求来源设备 |
 | `htoken` header | `1` | sync 请求标识 |
 | `Content-Type` | `application/x-www-form-urlencoded; charset=UTF-8` | 精确匹配 |
+
+### 9.6 总结：syncall 修复清单
+
+| # | 问题 | 修复 |
+|---|------|------|
+| 1 | JSON 字段名 `"billid"` | 改为 `"id"` (对应 Gson `@SerializedName("id")`) |
+| 2 | `omitempty` 省略空字段 | 移除 omitempty，空字符串/空数组必须发送 |
+| 3 | 默认值 0 而非 -1 | assetid/fromid/targetid/bookid/packid 默认 -1 |
+| 4 | 未生成 billid | `newBillID()`: 毫秒*1000 + rand(1000) |
+| 5 | 缺少 `htoken: 1` header | 添加 (buildSyncStringRequest 要求) |
+| 6 | 缺少 `fr` 参数 | 添加 (标识请求来源设备) |
+| 7 | 缺少 `packid` 字段 | 添加 |
+| 8 | 缺少 `cateid` 默认值 | 默认分类 "其它"=89693200 |
+
+---
+
+## 十、删除同步
+
+### 10.1 流程
+
+```
+CLI: qianji delete <billid>
+  → 本地标记 status=0
+  → syncall (dellist=[billid])
+  → 服务端返回 del_ids 确认 (has_failed=false)
+  → 其他设备 syncv2/pull
+  → deletes 数组包含该 billid
+  → savePullResult → deleteListByPK → 本地删除
+```
+
+### 10.2 验证结果
+
+| 步骤 | 结果 |
+|------|------|
+| syncall dellist | `del_ids=[billid]`, `has_failed=false` |
+| syncv2/pull | `deletes` 数组包含被删 billid |
+| 本地删除 | STATUS=0, 列表不再显示 |
+| 其他设备 | 模拟器下拉刷新后账单消失 |
