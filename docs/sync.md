@@ -279,3 +279,43 @@ tok       = MD5(reqId + "1172020" + ctrl + encReqId + act)
 | `com/.../data/db/dbhelper/l.java` | savePullResult + saveSyncedResult |
 | `com/.../arc/http/JNIHelper.java` | 签名入口 |
 | `lib/arm64-v8a/libfabricsuffer.so` | 签名算法实现 |
+
+---
+
+## 九、故障排查：syncall has_failed = true
+
+CLI 推送账单时遇到 `has_failed: true`，服务端拒绝存储。
+
+### 9.1 JSON 字段名
+
+手机 `Bill.toSyncJson()` 使用 Gson `@SerializedName("id")` 注解，字段名是 **`id`** 不是 `billid`。
+
+### 9.2 禁止 omitempty
+
+服务端要求以下字段即使为空也必须发送：
+
+| 字段 | 必须值 |
+|------|--------|
+| `descinfo` | `""` |
+| `extra` | `""` |
+| `username` | `""` |
+| `images` | `[]` |
+
+### 9.3 默认值
+
+| 字段 | 正确默认值 |
+|------|-----------|
+| `assetid` | `-1` |
+| `fromid` | `-1` |
+| `targetid` | `-1` |
+| `bookid` | `-1` |
+| `packid` | `-1` |
+| `cateid` | `89693200` (默认分类"其它") |
+
+### 9.4 必要参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `fr` | `<user_id>` | 请求来源设备 |
+| `htoken` header | `1` | sync 请求标识 |
+| `Content-Type` | `application/x-www-form-urlencoded; charset=UTF-8` | 精确匹配 |
