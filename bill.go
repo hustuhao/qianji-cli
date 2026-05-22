@@ -119,9 +119,9 @@ func (b Bill) WithTime(t time.Time) Bill {
 // SyncBills 推送本地变更到服务端（bill/syncall）。
 // SyncBills 推送本地变更到服务端（bill/syncall）。
 func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
-	// 构建 syncall payload，将 "id" 替换为 "billid"
+	// 构建 syncall payload，字段与 Bill.toSyncJson() 完全一致
 	type syncBill struct {
-		BillID     int64    `json:"billid"`
+		BillID     int64    `json:"id"`
 		UserID     string   `json:"userid"`
 		TimeInSec  int64    `json:"time"`
 		Type       int      `json:"type"`
@@ -129,31 +129,51 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 		Money      float64  `json:"money"`
 		Status     int      `json:"status"`
 		CateID     int64    `json:"cateid"`
-		Images     []string `json:"images,omitempty"`
-		PayType    int      `json:"paytype"`
+		Images     []string `json:"images"`
 		UpdateTime int64    `json:"updatetime"`
 		CreateTime int64    `json:"createtime"`
 		Platform   int      `json:"platform"`
 		AssetID    int64    `json:"assetid"`
 		FromID     int64    `json:"fromid"`
 		TargetID   int64    `json:"targetid"`
-		Extra      string   `json:"extra,omitempty"`
-		DescInfo   string   `json:"descinfo,omitempty"`
+		Extra      string   `json:"extra"`
+		DescInfo   string   `json:"descinfo"`
 		BookID     int64    `json:"bookid"`
-		Username   string   `json:"username,omitempty"`
+		Username   string   `json:"username"`
+		PackID     int64    `json:"packid"`
 	}
 
 	syncChanges := make([]syncBill, len(changes))
 	for i, b := range changes {
-		syncChanges[i] = syncBill{
+		sb := syncBill{
 			BillID: b.ID, UserID: b.UserID, TimeInSec: b.TimeInSec,
 			Type: b.Type, Remark: b.Remark, Money: b.Money,
-			Status: b.Status, CateID: b.CateID, Images: b.Images,
+			Status: b.Status, CateID: b.CateID,
 			UpdateTime: b.UpdateTime, CreateTime: b.CreateTime,
-			Platform: b.Platform, AssetID: b.AssetID,
-			FromID: b.FromID, TargetID: b.TargetID,
-			DescInfo: b.DescInfo, BookID: b.BookID, Username: b.Username,
+			Platform: b.Platform, DescInfo: b.DescInfo,
+			BookID: b.BookID, Username: b.Username,
+			AssetID: -1, FromID: -1, TargetID: -1, PackID: -1,
+			Images: []string{}, Extra: "",
 		}
+		if b.AssetID > 0 {
+			sb.AssetID = b.AssetID
+		}
+		if b.FromID > 0 {
+			sb.FromID = b.FromID
+		}
+		if b.TargetID > 0 {
+			sb.TargetID = b.TargetID
+		}
+		if b.BookID <= 0 {
+			sb.BookID = -1
+		}
+		if b.CateID <= 0 {
+			sb.CateID = 89693200 // 默认分类：其它
+		}
+		if len(b.Images) == 0 {
+			sb.Images = []string{}
+		}
+		syncChanges[i] = sb
 	}
 
 	payload := struct {
