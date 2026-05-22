@@ -220,13 +220,14 @@ func cmdAdd(args []string) {
 		bill = bill.WithTime(customTime)
 	}
 
-	_, err = s.AddBill(bill)
+	err = s.AddBill(bill)
 	if err != nil {
 		fatalf("记账失败: %v", err)
 	}
 
-	// 本地保存
+	// 本地保存 + 标记已同步
 	qianji.SaveBills([]qianji.Bill{bill})
+	qianji.MarkSynced([]int64{bill.ID})
 
 	act := "支出"
 	if isIncome {
