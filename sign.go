@@ -4,6 +4,9 @@ import (
 	"crypto/md5"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -29,7 +32,16 @@ var (
 )
 
 func init() {
-	// 生成随机设备 ID（模拟 j.k() 行为）
+	// 持久化设备 ID，确保服务端识别为同一设备
+	home, _ := os.UserHomeDir()
+	devIDFile := filepath.Join(home, ".qianji", "device_id")
+	data, err := os.ReadFile(devIDFile)
+	if err == nil && len(data) > 0 {
+		deviceID = strings.TrimSpace(string(data))
+		return
+	}
+
+	// 首次生成
 	uuid := fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		rand.Uint32(),
 		rand.Uint32()&0xffff,
@@ -39,6 +51,8 @@ func init() {
 	)
 	hash := md5.Sum([]byte(uuid))
 	deviceID = fmt.Sprintf("%x", hash)
+	os.MkdirAll(filepath.Dir(devIDFile), 0700)
+	os.WriteFile(devIDFile, []byte(deviceID), 0600)
 }
 
 // computeSign 计算 reqidv2 和 tok，完全模仿 libfabricsuffer.so 逻辑

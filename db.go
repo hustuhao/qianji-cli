@@ -192,6 +192,30 @@ func MarkSynced(billIDs []int64) error {
 	return err
 }
 
+// SaveCategories 批量保存分类（INSERT OR REPLACE）。
+func SaveCategories(cats []Category) error {
+	if db == nil || len(cats) == 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO category VALUES (?,?,?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, c := range cats {
+		_, err = stmt.Exec(c.ID, c.Name, c.Icon, c.Type, c.Sort, c.UserID, c.Editable, c.BookID, c.ParentID, c.Level)
+		if err != nil {
+			return fmt.Errorf("insert category %d: %w", c.ID, err)
+		}
+	}
+	return tx.Commit()
+}
+
 // CountBills 返回本地账单总数。
 func CountBills() int {
 	if db == nil {

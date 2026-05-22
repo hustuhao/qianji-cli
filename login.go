@@ -94,11 +94,13 @@ type Category struct {
 	ID       int64  `json:"id"`
 	Name     string `json:"name"`
 	Icon     string `json:"icon"`
-	ParentID int64  `json:"parent_id"`
+	ParentID int64  `json:"parentid"`
 	BookID   int64  `json:"bookid"`
 	Level    int    `json:"level"`
-	Type     int    `json:"type"`           // 0=expense 1=income
-	Sort     int    `json:"sort,omitempty"` // 支出 / 收入
+	Type     int    `json:"type"`
+	Sort     int    `json:"sort,omitempty"`
+	UserID   string `json:"userid,omitempty"`
+	Editable int    `json:"editable"`
 }
 
 // GetBooks 获取账本列表。

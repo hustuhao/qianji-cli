@@ -34,3 +34,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_bill_billid ON user_bill (billid);
 
 -- 辅助索引：按时间 + 状态查询（list 命令使用）
 CREATE INDEX IF NOT EXISTS idx_user_bill_time_status ON user_bill (TIME, STATUS);
+
+-- 分类表 — 来自 syncv2/pull 的 categories 字段
+CREATE TABLE IF NOT EXISTS category (
+    id       INTEGER PRIMARY KEY,
+    name     TEXT,
+    icon     TEXT,
+    type     INTEGER NOT NULL DEFAULT 0,
+    sort     INTEGER NOT NULL DEFAULT 0,
+    userid   TEXT,
+    editable INTEGER NOT NULL DEFAULT 1,
+    bookid   INTEGER NOT NULL DEFAULT -1,
+    parentid INTEGER NOT NULL DEFAULT -1,
+    level    INTEGER NOT NULL DEFAULT 1
+);

@@ -74,6 +74,9 @@ type SyncBody struct {
 // NewBill 创建一笔基础支出账单。
 func NewBill(bookID int64, money float64, remark string) Bill {
 	now := time.Now().Unix()
+	if bookID <= 0 {
+		bookID = 0
+	}
 	return Bill{
 		ID:         newBillID(),
 		BookID:     bookID,
@@ -152,7 +155,7 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 			UpdateTime: b.UpdateTime, CreateTime: b.CreateTime,
 			Platform: b.Platform, DescInfo: b.DescInfo,
 			BookID: b.BookID, Username: b.Username,
-			AssetID: -1, FromID: -1, TargetID: -1, PackID: -1,
+			AssetID: 0, FromID: 0, TargetID: 0, PackID: 0,
 			Images: []string{}, Extra: "",
 		}
 		if b.AssetID > 0 {
@@ -165,7 +168,7 @@ func (s *Session) SyncBills(changes []Bill, deletes []int64) ([]int64, error) {
 			sb.TargetID = b.TargetID
 		}
 		if b.BookID <= 0 {
-			sb.BookID = -1
+			sb.BookID = 0
 		}
 		if b.CateID <= 0 {
 			sb.CateID = 89693200 // 默认分类：其它
@@ -277,9 +280,10 @@ func (s *Session) AddBill(bill Bill) error {
 
 // PullResult 是 syncv2/pull 响应。
 type PullResult struct {
-	Changes  []Bill   `json:"changes"`
-	Deletes  []int64  `json:"deletes"`
-	PageInfo PullPage `json:"-"`
+	Changes    []Bill     `json:"changes"`
+	Deletes    []int64    `json:"deletes"`
+	Categories []Category `json:"categories"`
+	PageInfo   PullPage   `json:"-"`
 }
 
 // PullPage 分页信息。
@@ -360,18 +364,17 @@ func (s *Session) PullBills(bookID int64, lastTimes string, pageOff int64, pageS
 
 // FullSync 完整同步：先拉取其他设备账单，再推送本地待同步。
 func (s *Session) FullSync(pending []Bill) (pulledBills []Bill, err error) {
-	// 1. PULL: 循环拉直到 hasMore=false
 	pageOff := int64(0)
 	pageSign := ""
+	var allCats []Category
 	for {
 		pr, err := s.PullBills(-1, "", pageOff, pageSign)
 		if err != nil {
 			return pulledBills, fmt.Errorf("pull page: %w", err)
 		}
 		pulledBills = append(pulledBills, pr.Changes...)
-		// 处理删除
+		allCats = append(allCats, pr.Categories...)
 		for _, delID := range pr.Deletes {
-			// 本地标记为已删除
 			SaveBills([]Bill{{ID: delID, Status: 0}})
 		}
 		if !pr.PageInfo.HasMore {
@@ -381,7 +384,11 @@ func (s *Session) FullSync(pending []Bill) (pulledBills []Bill, err error) {
 		pageSign = pr.PageInfo.PageSign
 	}
 
-	// 2. PUSH: 推送本地待同步
+	// 保存分类（必须在账单之前，确保后续查询能匹配分类名）
+	if len(allCats) > 0 {
+		SaveCategories(allCats)
+	}
+
 	if len(pending) > 0 {
 		s.SyncBills(pending, nil)
 		for _, b := range pending {
