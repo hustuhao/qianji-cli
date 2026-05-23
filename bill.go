@@ -283,6 +283,50 @@ func (s *Session) AddBill(bill Bill) error {
 	return err
 }
 
+// ModifyBill 修改已存在的账单（一次 syncall 同时删旧建新）。
+// 支持修改: Money, Remark, CateID, TimeInSec, Type。
+func (s *Session) ModifyBill(billID int64, updates Bill) error {
+	bill, err := QueryBillByID(billID)
+	if err != nil {
+		return fmt.Errorf("modify: %w", err)
+	}
+
+	// 应用更新到旧账单
+	if updates.Money > 0 {
+		bill.Money = updates.Money
+	}
+	if updates.Remark != "" {
+		bill.Remark = updates.Remark
+	}
+	if updates.CateID > 0 {
+		bill.CateID = updates.CateID
+	}
+	if updates.TimeInSec > 0 {
+		bill.TimeInSec = updates.TimeInSec
+		bill.CreateTime = updates.TimeInSec
+	}
+	if updates.Type != 0 || updates.Type == TypeIncome {
+		bill.Type = updates.Type
+	}
+	bill.UpdateTime = time.Now().Unix()
+
+	// 生成新 billid
+	bill.ID = newBillID()
+	bill.Status = StatusNotSync // 标记为待同步
+
+	// 一次 syncall：同时删旧 + 建新
+	_, err = s.SyncBills([]Bill{*bill}, []int64{billID})
+	if err != nil {
+		return fmt.Errorf("modify: %w", err)
+	}
+
+	// 保存（旧记录标记删除，新记录写入）
+	SaveBills([]Bill{{ID: billID, Status: 0}})
+	SaveBills([]Bill{*bill})
+	MarkSynced([]int64{bill.ID})
+	return nil
+}
+
 // PullResult 是 syncv2/pull 响应。
 type PullResult struct {
 	Changes    []Bill     `json:"changes"`

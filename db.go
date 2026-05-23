@@ -54,11 +54,21 @@ func SaveBills(bills []Bill) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO user_bill
+		INSERT INTO user_bill
 		(billid, USERID, TIME, TYPE, REMARK, MONEY, STATUS, CATEGORY_ID,
 		 IMAGES, PAYTYPE, updatetime, createtime, PLATFORM, ASSETID, FROMID, TARGETID,
 		 EXTRA, DESCINFO, bookid, USERNAME, FROMACT, TARGETACT, IMPORT_PACK_ID, BOOK_NAME)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(billid) DO UPDATE SET
+			USERID=excluded.USERID, TIME=excluded.TIME, TYPE=excluded.TYPE,
+			REMARK=excluded.REMARK, MONEY=excluded.MONEY, STATUS=excluded.STATUS,
+			CATEGORY_ID=excluded.CATEGORY_ID, IMAGES=excluded.IMAGES,
+			updatetime=excluded.updatetime, createtime=excluded.createtime,
+			PLATFORM=excluded.PLATFORM, ASSETID=excluded.ASSETID,
+			FROMID=excluded.FROMID, TARGETID=excluded.TARGETID,
+			EXTRA=excluded.EXTRA, DESCINFO=excluded.DESCINFO,
+			bookid=excluded.bookid, USERNAME=excluded.USERNAME,
+			BOOK_NAME=excluded.BOOK_NAME
 	`)
 	if err != nil {
 		return err
@@ -173,6 +183,28 @@ func QueryPendingBills() ([]Bill, error) {
 	return scanBills(rows)
 }
 
+// QueryBillByID 按 billid 查询单笔账单。
+func QueryBillByID(billID int64) (*Bill, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	rows, err := db.Query(`
+		SELECT `+billColumns+` FROM user_bill WHERE billid = ?
+	`, billID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	bills, err := scanBills(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(bills) == 0 {
+		return nil, fmt.Errorf("bill %d not found", billID)
+	}
+	return &bills[0], nil
+}
+
 // MarkSynced 将指定账单 ID 标记为已同步（status=1）。
 func MarkSynced(billIDs []int64) error {
 	if db == nil || len(billIDs) == 0 {
@@ -260,11 +292,21 @@ func SaveTo(extDB *sql.DB, bills []Bill) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO user_bill
+		INSERT INTO user_bill
 		(billid, USERID, TIME, TYPE, REMARK, MONEY, STATUS, CATEGORY_ID,
 		 IMAGES, PAYTYPE, updatetime, createtime, PLATFORM, ASSETID, FROMID, TARGETID,
 		 EXTRA, DESCINFO, bookid, USERNAME, FROMACT, TARGETACT, IMPORT_PACK_ID, BOOK_NAME)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(billid) DO UPDATE SET
+			USERID=excluded.USERID, TIME=excluded.TIME, TYPE=excluded.TYPE,
+			REMARK=excluded.REMARK, MONEY=excluded.MONEY, STATUS=excluded.STATUS,
+			CATEGORY_ID=excluded.CATEGORY_ID, IMAGES=excluded.IMAGES,
+			updatetime=excluded.updatetime, createtime=excluded.createtime,
+			PLATFORM=excluded.PLATFORM, ASSETID=excluded.ASSETID,
+			FROMID=excluded.FROMID, TARGETID=excluded.TARGETID,
+			EXTRA=excluded.EXTRA, DESCINFO=excluded.DESCINFO,
+			bookid=excluded.bookid, USERNAME=excluded.USERNAME,
+			BOOK_NAME=excluded.BOOK_NAME
 	`)
 	if err != nil {
 		return err

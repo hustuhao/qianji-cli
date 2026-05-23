@@ -48,6 +48,8 @@ func main() {
 		cmdList(args)
 	case "delete", "rm", "del":
 		cmdDelete(args)
+	case "modify", "edit", "mod":
+		cmdModify(args)
 	case "sync":
 		cmdSync(args)
 	case "cats", "cat", "categories":
@@ -73,7 +75,10 @@ func printUsage() {
 命令:
   login          登录到钱迹账号
   add <金额> <备注>  快速添加一笔支出
+  modify <billid> 修改已有账单
   list            列出今日账单
+  delete <billid> 删除账单
+  sync            从服务端同步数据
   cats           列出所有分类
   books          列出所有账本
   assets         列出资产账户
@@ -84,8 +89,12 @@ func printUsage() {
   qianji add 26.5 咖啡         支出一笔 26.5 元"咖啡"
   qianji add -i 1000 工资      收入一笔 1000 元"工资"
   qianji add -c 5 35 午餐      指定分类 ID 为 5
+  qianji modify 12345 -m 30    修改金额
+  qianji modify 12345 -r 备注  修改备注
+  qianji modify 12345 -c 5     修改分类
   qianji list                  列出今天的账单
-  qianji list -d 5.20          列出 5 月 20 日的账单`)
+  qianji list -d 5.20          列出 5 月 20 日的账单
+  qianji delete 12345          删除账单`)
 }
 
 // ---- login ----
@@ -340,7 +349,7 @@ func printBills(bills []qianji.Bill, targetDate time.Time) {
 			expenseTotal += b.Money
 		}
 		t := time.Unix(b.TimeInSec, 0).Format("15:04")
-		fmt.Printf("  %s  %-6s  ¥%-8.2f  %s\n", t, tag, b.Money, b.Remark)
+		fmt.Printf("  %s  %-6s  ¥%-8.2f  %-20s  [%d]\n", t, tag, b.Money, b.Remark, b.ID)
 	}
 
 	fmt.Println(strings.Repeat("-", 60))
@@ -374,6 +383,66 @@ func cmdDelete(args []string) {
 	// 本地标记删除
 	qianji.SaveBills([]qianji.Bill{{ID: billID, Status: 0}})
 	fmt.Printf("已删除 billid=%d\n", billID)
+}
+
+// ---- modify ----
+
+func cmdModify(args []string) {
+	if len(args) < 1 {
+		fatalf("用法: qianji modify <billid> [-m <金额>] [-r <备注>] [-c <分类ID>] [-t <时间>] [-i 改为收入]\n先用 qianji list 查看 billid")
+	}
+	billID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		fatalf("billid 格式错误: %s", args[0])
+	}
+
+	var updates qianji.Bill
+	var isIncome bool
+
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "-m":
+			i++
+			if i < len(args) {
+				moneyVal, err := strconv.ParseFloat(args[i], 64)
+				if err != nil {
+					fatalf("金额格式错误: %s", args[i])
+				}
+				updates.Money = moneyVal
+			}
+		case "-r":
+			i++
+			if i < len(args) {
+				updates.Remark = args[i]
+			}
+		case "-c":
+			i++
+			if i < len(args) {
+				updates.CateID, _ = strconv.ParseInt(args[i], 10, 64)
+			}
+		case "-t":
+			i++
+			if i < len(args) {
+				t, err := parseTime(args[i])
+				if err != nil {
+					fatalf("时间格式错误: %v", err)
+				}
+				updates.TimeInSec = t.Unix()
+			}
+		case "-i":
+			isIncome = true
+		}
+	}
+
+	if isIncome {
+		updates.Type = qianji.TypeIncome
+	}
+
+	s := mustSession()
+	if err := s.ModifyBill(billID, updates); err != nil {
+		fatalf("修改失败: %v", err)
+	}
+	fmt.Printf("已修改 billid=%d\n", billID)
 }
 
 // ---- logout ----
