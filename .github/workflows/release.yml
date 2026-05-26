@@ -35,12 +35,11 @@ jobs:
           go build -ldflags="-s -w" -o "$NAME" ./cmd/qianji
           tar -czf "qianji_${GOOS}_${GOARCH}.tar.gz" "$NAME"
 
-      - name: Upload to Release
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: qianji_*.tar.gz
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          EXT=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
-          FILE="qianji_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
-          gh release upload "$TAG" "$FILE" --clobber
